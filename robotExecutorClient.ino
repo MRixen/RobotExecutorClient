@@ -3,33 +3,11 @@ struct dxl_commands
 	int GOAL_POSITION;
 };
 
-union DXL_IDs
+union DXL_MSG
 {
-	short dxl_ids;
-	byte bytes[2];
-};
-
-union DXL_MSG_START
-{
-	short dxl_msg_start;
+	int dxl_msg;
 	byte bytes[4];
 };
-
-union DXL_POSITION_1
-{
-	short dxl_position;
-	byte bytes[2];
-};
-
-union DXL_POSITION_2
-{
-	short dxl_position;
-	byte bytes[2];
-};
-
-int dxl_speed;
-
-byte controlData[35];
 
 int DXL_BUS_SERIAL = 3;
 int DXL_MOTOR_AMOUNT = 1;
@@ -43,9 +21,8 @@ bool debugMode;
 
 
 void setup() {
-
 	// Init user defines
-	debugMode = true;
+	debugMode = false;
 
 	if (debugMode) Serial1.begin(115200);
 
@@ -62,62 +39,51 @@ void setup() {
 
 //USB max packet data is maximum 64byte, so nCount can not exceeds 64 bytes
 void usbInterrupt(byte* buffer, byte nCount) {
-	int positionData[16];
-	int idData[16];
-
-	if (debugMode) toggleLED();
+	int positionData[8];
+	int idData[8];
+	byte controlData[64];
 
 	// Read everything from stream
-	for (unsigned int i = 0; i < nCount; i++) {
-		if (debugMode) Serial1.write(buffer[i]);
-		controlData[i] = buffer[i];
-	}
+	for (unsigned int i = 0; i < nCount; i++) controlData[i] = buffer[i];
 
 	// Extract start message from stream
-	DXL_MSG_START msgStart;
-	msgStart.bytes[0] = controlData[0];
-	msgStart.bytes[1] = controlData[1];
-	msgStart.bytes[2] = controlData[2];
-	msgStart.bytes[3] = controlData[3];
+	DXL_MSG msgStart;
+	for (int i = 0; i < 4; i++) msgStart.bytes[i] = controlData[i];
 
-	if (debugMode) Serial1.write(buffer[i]);
-	// Extract ids from stream
-	//DXL_IDs ids;
-	//ids.bytes[0] = controlData[2];
-	//ids.bytes[1] = controlData[3];
+	if (msgStart.dxl_msg == 9999) {
 
-	// TODO Print the ids to see what is inside
+		// Extract ids from stream
+		DXL_MSG ids;
+		for (int i = 0; i < 4; i++) ids.bytes[i] = controlData[i + 4];
+		for (size_t i = 0; i < 8; i++) {
+			if ((ids.dxl_msg & (1 << i)) > 0) idData[i] = 1;
+			else idData[i] = 0;
+		}
 
-	//for (size_t i = 0; i < 16; i++) {
+		// Extract speed from stream
+		DXL_MSG speed;
+		for (int i = 0; i < 4; i++) speed.bytes[i] = controlData[i + 8];
 
-		//idData[i] = ids.dxl_ids & (1 << i);
-		//Serial1.println(idData[i]);
-		//Serial1.println((1 << i));
-	//}
+		// Extract positions from stream
+		DXL_MSG position;
+		for (int i = 0; i < 4; i++) position.bytes[i] = controlData[i + 12];
+		positionData[0] = position.dxl_msg;
 
-	// Extract speed
-	//dxl_speed = controlData[4];
+		int cntr = 0;
+		while (true) {
+			for (int i = 0; i < 4; i++) position.bytes[i] = controlData[i + 16 + (cntr * 4)];
+			// Stop reading position when end of message is reached
+			if (position.dxl_msg == 8888) break;
+			else {
+				positionData[cntr + 1] = position.dxl_msg;
+				cntr++;
+			}
+		}
 
-	// Extract positions
-	/*DXL_POSITION_1 position_1;
-	position_1.bytes[0] = controlData[5];
-	position_1.bytes[1] = controlData[6];
-
-	DXL_POSITION_2 position_2;
-	position_2.bytes[0] = controlData[7];
-	position_2.bytes[1] = controlData[8];
-
-	positionData[0] = position_1.dxl_position;
-	positionData[1] = position_2.dxl_position;*/
-
-	// TODO: Add SPEED data
-	// TODO: Print the last data
-	for (size_t i = 0; i < 2; i++) {
-		if (idData[i] != 0) Dxl.writeWord(idData[i], DXL_COMMANDS.GOAL_POSITION, positionData[i]);
-		//if (debugMode) Serial1.write(idData[i]);
-
-		//if (debugMode) Serial1.write(positionData[i]);
+		// Sending data to dynamixels
+		for (int i = 0; i < 8; i++) if(idData[i] == 1) Dxl.writeWord(i+1, DXL_COMMANDS.GOAL_POSITION, positionData[i]);
 	}
+
 }
 
 void loop() {

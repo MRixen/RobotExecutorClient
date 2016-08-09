@@ -123,7 +123,7 @@ void loop() {
 			for (int i = 0; i < 8; i++) {
 				if (idData[i] == 1) {
 					int tempPos = Dxl.readWord(i + 1, DXL_COMMANDS.PRESENT_POSITION);
-					if (!((tempPos >= (positionData[i] - 5)) || (tempPos <= (positionData[i] + 5)))) {
+					if (!((tempPos >= (positionData[i] - 5)) && (tempPos <= (positionData[i] + 5)))) {
 						positionReached = false;
 						break;
 					}
@@ -134,7 +134,7 @@ void loop() {
 			}
 			if (positionReached)
 			{
-				SerialUSB.write(1);
+				SerialUSB.write(10);
 				newDataAvailable = false;
 				positionReached = false;
 			}

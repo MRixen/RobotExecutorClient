@@ -21,7 +21,7 @@ union DXL_MSG_RETURN
 DXL_MSG_RETURN positionRequest;
 
 int DXL_BUS_SERIAL = 3;
-int DXL_MOTOR_AMOUNT = 1;
+int DXL_MOTOR_AMOUNT = 8;
 
 typedef struct dxl_commands Dxl_commands;
 Dxl_commands DXL_COMMANDS;
@@ -35,6 +35,7 @@ bool newDataAvailable = false;
 bool positionReached = false;
 int positionData[8];
 int idData[8];
+int MSG_BLOCK_SIZE = 2;
 
 void setup() {
 	// TODO: Ping dynamixels at first
@@ -71,7 +72,7 @@ void usbInterrupt(byte* buffer, byte nCount) {
 
 	// Extract start message from stream
 	DXL_MSG msgStart;
-	for (int i = 0; i < 4; i++) msgStart.bytes[i] = controlData[i];
+	for (int i = 0; i < MSG_BLOCK_SIZE; i++) msgStart.bytes[i] = controlData[i];
 
 	if (msgStart.dxl_msg == 9999) {
 
@@ -80,7 +81,7 @@ void usbInterrupt(byte* buffer, byte nCount) {
 
 		// Extract ids from stream
 		DXL_MSG ids;
-		for (int i = 0; i < 4; i++) ids.bytes[i] = controlData[i + 4];
+		for (int i = 0; i < MSG_BLOCK_SIZE; i++) ids.bytes[i] = controlData[i + MSG_BLOCK_SIZE];
 		for (size_t i = 0; i < 8; i++) {
 			if ((ids.dxl_msg & (1 << i)) > 0) idData[i] = 1;
 			else idData[i] = 0;
@@ -88,17 +89,25 @@ void usbInterrupt(byte* buffer, byte nCount) {
 
 		// Extract speed from stream
 		DXL_MSG speed;
-		for (int i = 0; i < 4; i++) speed.bytes[i] = controlData[i + 8];
+		int cntr = 0;
+		while (true) {
+			if(idData[cntr] == 1){
+				for (int i = 0; i < MSG_BLOCK_SIZE; i++) speed.bytes[i] = controlData[i + MSG_BLOCK_SIZE*2 + (cntr * MSG_BLOCK_SIZE)];
+				positionData[cntr] = speed.dxl_msg;
+				cntr++;
+			}
+		}
 
+		// TODO extract position data like speed data. We dont need endsequenz!
 		// Extract positions from stream
 		DXL_MSG position;
-		for (int i = 0; i < 4; i++) position.bytes[i] = controlData[i + 12];
+		for (int i = 0; i < MSG_BLOCK_SIZE; i++) position.bytes[i] = controlData[i + MSG_BLOCK_SIZE*3];
 		positionData[0] = position.dxl_msg;
 
 		int cntr = 0;
 		while (true) {
-			for (int i = 0; i < 4; i++) position.bytes[i] = controlData[i + 16 + (cntr * 4)];
-			// Stop reading position when end of message is reached
+			for (int i = 0; i < MSG_BLOCK_SIZE; i++) position.bytes[i] = controlData[i + MSG_BLOCK_SIZE*4 + (cntr * MSG_BLOCK_SIZE)];
+			// Stop reading position when max id amount is reached 
 			if (position.dxl_msg == 8888) break;
 			else {
 				positionData[cntr + 1] = position.dxl_msg;
@@ -107,7 +116,7 @@ void usbInterrupt(byte* buffer, byte nCount) {
 		}
 
 		// Sending data to dynamixels
-		for (int i = 0; i < 8; i++) if (idData[i] == 1) {
+		for (int i = 0; i < DXL_MOTOR_AMOUNT; i++) if (idData[i] == 1) {
 			Dxl.setPosition(i + 1, positionData[i], speed.dxl_msg);
 		}
 		transmissionIsActive = false;

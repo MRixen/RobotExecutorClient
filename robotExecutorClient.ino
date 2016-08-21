@@ -9,7 +9,7 @@ struct dxl_commands
 
 union DXL_MSG
 {
-	int dxl_msg;
+	short dxl_msg;
 	byte bytes[2];
 };
 
@@ -38,6 +38,11 @@ int speedData[8];
 int idData[8];
 int MSG_BLOCK_SIZE = 2;
 int dynamixelAmount;
+int SMOOTH_ZONE = 3; // Zone to set position reached bit
+
+bool sendSomething = false;
+short dataArray[] = { 300, 0 };
+int counter = 0;
 
 void setup() {
 	// TODO: Ping dynamixels at first
@@ -45,7 +50,7 @@ void setup() {
 	// Init user defines
 	debugMode = false;
 
-	if (debugMode) Serial1.begin(9600);
+	if (debugMode) Serial1.begin(115200);
 
 	// Init dxl commandos
 	DXL_COMMANDS.GOAL_POSITION = 30;
@@ -63,6 +68,8 @@ void setup() {
 	positionRequest.bytes[1] = 37;
 
 	pinMode(BOARD_LED_PIN, OUTPUT);
+
+	Dxl.setPosition(1, dataArray[1], 300);
 }
 
 //USB max packet data is maximum 64byte, so nCount can not exceeds 64 bytes
@@ -77,9 +84,10 @@ void usbInterrupt(byte* buffer, byte nCount) {
 	for (int i = 0; i < MSG_BLOCK_SIZE; i++) msgStart.bytes[i] = controlData[i];
 
 	if (msgStart.dxl_msg == 9999) {
+	//if (true) {
 
-		//newDataAvailable = true;
-		//transmissionIsActive = true;
+		newDataAvailable = true;
+		transmissionIsActive = true;
 
 		// Extract ids from stream
 		DXL_MSG ids;
@@ -110,33 +118,40 @@ void usbInterrupt(byte* buffer, byte nCount) {
 
 		// Sending data to dynamixels
 		for (int i = 0; i < dynamixelAmount; i++) Dxl.setPosition(i + 1, positionData[i], speedData[i]);
-		//transmissionIsActive = false;
+		//Dxl.setPosition(1, positionData[0], 50);
+
+		transmissionIsActive = false;
 	}
 }
 
 void loop() {
+	int istPos;
 	// Check if new position data is available
-	//if (newDataAvailable) {
-	//	// Check if transmission is active
-	//	if (!transmissionIsActive) {
-	//		// Check if current position of all dynamixel is in soll position
-	//		for (int i = 0; i < dynamixelAmount; i++) {
-	//			int tempPos = Dxl.readWord(i + 1, DXL_COMMANDS.PRESENT_POSITION);
-	//			if (!((tempPos >= (positionData[i] - 5)) && (tempPos <= (positionData[i] + 5)))) {
-	//				positionReached = false;
-	//				break;
-	//			}
-	//			else {
-	//				positionReached = true;
-	//			}
-	//		}
-	//		if (positionReached)
-	//		{
-	//			SerialUSB.write(10);
-	//			newDataAvailable = false;
-	//			positionReached = false;
-	//		}
-	//	}
-	//}
+	if (newDataAvailable) {
+		// Check if transmission is active
+		if (!transmissionIsActive) {
+			// Check if current position of all dynamixel is in soll position
+			for (int i = 0; i < 1; i++) {
+				istPos = Dxl.readWord(1, DXL_COMMANDS.PRESENT_POSITION);
+				if (!((istPos >= (positionData[0] - SMOOTH_ZONE)) & (istPos <= (positionData[0] + SMOOTH_ZONE)))) {
+					//SerialUSB.println(istPos);
+					positionReached = false;
+					break;
+				}
+				else {
+					positionReached = true;
+				}
+			}
+			if (positionReached)
+			{
+				positionReached = false;
+				newDataAvailable = false;
+				SerialUSB.write(1);
+				//SerialUSB.println(1111);
+				//counter++;
+				//if (counter>1)  counter = 0;
+			}
+		}
+	}
 }
 

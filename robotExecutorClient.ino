@@ -68,8 +68,12 @@ void setup() {
 	positionRequest.bytes[1] = 37;
 
 	pinMode(BOARD_LED_PIN, OUTPUT);
+	digitalWrite(BOARD_LED_PIN, HIGH);
 
-	Dxl.setPosition(1, dataArray[1], 300);
+	for (size_t i = 0; i < 7; i++)
+	{
+		Dxl.setPosition(i+1, dataArray[1], 300);
+	}
 }
 
 //USB max packet data is maximum 64byte, so nCount can not exceeds 64 bytes
@@ -101,6 +105,14 @@ void usbInterrupt(byte* buffer, byte nCount) {
 			else idData[i] = 0;
 		}
 
+		//for (size_t i = 0; i < dynamixelAmount; i++)
+		//{
+		//	digitalWrite(BOARD_LED_PIN, LOW);
+		//	delay(250);
+		//	digitalWrite(BOARD_LED_PIN, HIGH);
+		//	delay(250);
+		//}
+
 		// Extract speed from stream
 		DXL_MSG speed;
 		for (int j = 0; j < dynamixelAmount; j++) {
@@ -117,7 +129,7 @@ void usbInterrupt(byte* buffer, byte nCount) {
 		}
 
 		// Sending data to dynamixels
-		for (int i = 0; i < dynamixelAmount; i++) Dxl.setPosition(i + 1, positionData[i], speedData[i]);
+		for (int i = 0; i < dynamixelAmount; i++) Dxl.setPosition(i + 1, positionData[0], speedData[0]);
 		//Dxl.setPosition(1, positionData[0], 50);
 
 		transmissionIsActive = false;
@@ -133,7 +145,7 @@ void loop() {
 			// Check if current position of all dynamixel is in soll position
 			for (int i = 0; i < 1; i++) {
 				istPos = Dxl.readWord(1, DXL_COMMANDS.PRESENT_POSITION);
-				if (!((istPos >= (positionData[0] - SMOOTH_ZONE)) & (istPos <= (positionData[0] + SMOOTH_ZONE)))) {
+				if (!((istPos >= (positionData[0] - SMOOTH_ZONE)) & (istPos <= (positionData[i] + SMOOTH_ZONE)))) {
 					//SerialUSB.println(istPos);
 					positionReached = false;
 					break;
